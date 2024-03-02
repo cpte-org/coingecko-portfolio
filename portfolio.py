@@ -36,6 +36,14 @@ def fetch_data(coin):
     if coin in cached_data:
         return cached_data[coin]
 
+    # Check if the coin is a stable coin
+    stable_coin_list = ["usdd", "usd-coin", "tether", "dai", "husd", "tusd", "busd", "aave-v3-usdt"]
+    if coin.lower() in stable_coin_list:
+        # Cache the stable coin data
+        cached_data[coin] = (1.0, 0.0, 0.0, 0.0)  # Default values for stable coins
+        save_cached_data()  # Save cached data to file
+        return cached_data[coin]
+
     url = f"https://api.coingecko.com/api/v3/coins/{coin}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
     headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
     response = requests.get(url, headers=headers)
@@ -51,6 +59,7 @@ def fetch_data(coin):
     else:
         print(f"Failed to fetch data for {coin}.")
         return None, None, None, None
+
 
 def calculate_portfolio_value(portfolio):
     total_value = 0
