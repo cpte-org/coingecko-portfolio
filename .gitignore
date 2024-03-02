@@ -13,4 +13,7 @@ env/
 
 # Other files
 portfolio.json
+cached_data.dat
 
+# Ignore PDF files
+*.pdf
