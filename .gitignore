@@ -1,0 +1,16 @@
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*.class
+
+# Environment
+.env
+
+# Dependency directories
+venv/
+env/
+
+# Other files
+portfolio.json
+
