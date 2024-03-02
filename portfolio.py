@@ -173,8 +173,7 @@ def main():
     while True:
         # Ping CoinGecko API to check response
         url = "https://api.coingecko.com/api/v3/ping"
-        headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
-        response = requests.get(url, headers=headers)
+        response = requests.get(url)
         if response.status_code != 200:
             print("Failed to connect to CoinGecko API. Please try again later.")
             break
