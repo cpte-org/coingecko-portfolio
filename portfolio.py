@@ -102,7 +102,7 @@ def fetch_data(coin, use_savings=True):
 
 
 
-def calculate_portfolio_value(portfolio):
+def calculate_portfolio_value(portfolio, use_savings=True):
     total_value = 0
     for coin, quantity in portfolio.items():
         price, _, _, _ = fetch_data(coin, use_savings)
@@ -111,7 +111,7 @@ def calculate_portfolio_value(portfolio):
     return total_value
 
 
-def generate_pdf_report(portfolio_id):
+def generate_pdf_report(portfolio_id, use_savings=True):
     if portfolio_id not in portfolio_data:
         print("Error: Portfolio ID not found.")
         return
@@ -164,7 +164,7 @@ def generate_pdf_report(portfolio_id):
         )
 
     # Add total portfolio value
-    total_value = calculate_portfolio_value(portfolio)
+    total_value = calculate_portfolio_value(portfolio, use_savings)
     data.append(["", "", "", "", "", "Total Portfolio Value", f"${total_value:.2f}"])
 
     # Add date
@@ -190,7 +190,7 @@ def generate_pdf_report(portfolio_id):
     doc.build([table])
 
 
-def display_portfolio(portfolio_id):
+def display_portfolio(portfolio_id, use_savings=True):
     if portfolio_id not in portfolio_data:
         print("Error: Portfolio ID not found.")
         return
@@ -214,7 +214,7 @@ def display_portfolio(portfolio_id):
 
     total_value_label = tk.Label(
         root,
-        text=f"Total Portfolio Value: ${calculate_portfolio_value(portfolio):.2f}",
+        text=f"Total Portfolio Value: ${calculate_portfolio_value(portfolio, use_savings):.2f}",
         font=("Helvetica", 12),
     )
     total_value_label.pack()
@@ -317,7 +317,7 @@ def main():
             # Print the table
             print(tabulate(table_data, headers=headers, tablefmt="pretty"))
 
-            total_value = calculate_portfolio_value(portfolio)
+            total_value = calculate_portfolio_value(portfolio, use_savings)
             print(f"\nTotal Portfolio Value: ${total_value:.2f}\n")
             print("Portfolio data refreshed.")
         elif choice == "2":
@@ -325,14 +325,14 @@ def main():
             if active_portfolio_id is None:
                 print("Error: No active portfolio selected.")
                 continue
-            generate_pdf_report(active_portfolio_id)
+            generate_pdf_report(active_portfolio_id, use_savings)
             print("PDF report generated successfully.")
         elif choice == "3":
             # Display portfolio GUI for the active portfolio
             if active_portfolio_id is None:
                 print("Error: No active portfolio selected.")
                 continue
-            display_portfolio(active_portfolio_id)
+            display_portfolio(active_portfolio_id, use_savings)
         elif choice == "4":
             # Switch active portfolio
             print("Available Portfolio IDs:")
