@@ -71,17 +71,23 @@ def fetch_data(coin, use_savings=True):
         "busd",
         "aave-v3-usdt",
     ]
-    if coin.lower() in stable_coin_list:
-        # Cache the stable coin data
-        cached_data[coin] = (1.0, 0.0, 0.0, 0.0)  # Default values for stable coins
-        save_cached_data()  # Save cached data to file
+    if use_savings and coin.lower() in stable_coin_list:
+        cached_data[coin] = (1.0, 0.0, 0.0, 0.0)
+        save_cached_data()
         return cached_data[coin]
 
-    # Fetch data using the public API without API key first
     url = f"https://api.coingecko.com/api/v3/coins/{coin}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
-    response = requests.get(url)
-    if response.status_code == 429:  # Rate limit exceeded
-        # If rate limit exceeded, use the API key
+
+    # Check if to use API key or not
+    if use_savings:
+        # Try fetching without API key first
+        response = requests.get(url)
+        if response.status_code == 429:  # Rate limit exceeded
+            # If rate limit exceeded, use the API key
+            headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
+            response = requests.get(url, headers=headers)
+    else:
+        # Fetch directly with API key
         headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
         response = requests.get(url, headers=headers)
 
@@ -99,7 +105,6 @@ def fetch_data(coin, use_savings=True):
     else:
         print(f"Failed to fetch data for {coin}.")
         return None, None, None, None
-
 
 
 def calculate_portfolio_value(portfolio, use_savings=True):
@@ -121,47 +126,16 @@ def generate_pdf_report(portfolio_id, use_savings=True):
     # Generate file name with current date
     file_name = f"portfolio_report_{portfolio_id}.pdf"
     doc = SimpleDocTemplate(file_name, pagesize=letter)
-    data = []
-
-    # Add header row
-    data.append(
-        [
-            "Coin",
-            "Price",
-            "1h Change",
-            "24h Change",
-            "7d Change",
-            "Quantity",
-            "Value",
-        ]
-    )
+    data = [["Coin", "Price", "1h Change", "24h Change", "7d Change", "Quantity", "Value"]]
 
     for coin, quantity in portfolio.items():
         price, change_1h, change_24h, change_7d = fetch_data(coin, use_savings)
-
-        if price is not None and all(
-            change is not None for change in [change_1h, change_24h, change_7d]
-        ):
-            coin_value = price * quantity
-        else:
-            price = price if price is not None else "Price not available"
-            change_1h = f"{change_1h:.2f}%" if change_1h is not None else "N/A"
-            change_24h = f"{change_24h:.2f}%" if change_24h is not None else "N/A"
-            change_7d = f"{change_7d:.2f}%" if change_7d is not None else "N/A"
-            coin_value = (
-                price * quantity if price is not None else "Value not available"
-            )
-        data.append(
-            [
-                coin,
-                f"${price:.2f}",
-                f"{change_1h:.2f}%",
-                f"{change_24h:.2f}%",
-                f"{change_7d:.2f}%",
-                str(quantity),
-                f"${coin_value:.2f}",
-            ]
-        )
+        price = price if price is not None else "Price not available"
+        change_1h = f"{change_1h:.2f}%" if change_1h is not None else "N/A"
+        change_24h = f"{change_24h:.2f}%" if change_24h is not None else "N/A"
+        change_7d = f"{change_7d:.2f}%" if change_7d is not None else "N/A"
+        coin_value = price * quantity if isinstance(price, float) else "Value not available"
+        data.append([coin, f"${price:.2f}", change_1h, change_24h, change_7d, str(quantity), f"${coin_value:.2f}"])
 
     # Add total portfolio value
     total_value = calculate_portfolio_value(portfolio, use_savings)
@@ -188,7 +162,6 @@ def generate_pdf_report(portfolio_id, use_savings=True):
 
     # Add table to document
     doc.build([table])
-
 
 def display_portfolio(portfolio_id, use_savings=True):
     if portfolio_id not in portfolio_data:
@@ -284,7 +257,6 @@ def main():
 
         choice = input("Enter your choice: ")
         if choice == "1":
-            # Fetch portfolio data from user input
             print("Available Portfolio IDs:")
             for index, portfolio_id in enumerate(portfolio_data, start=1):
                 print(f"{index}. {portfolio_id}")
