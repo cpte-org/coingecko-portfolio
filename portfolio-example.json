@@ -1,5 +1,13 @@
 {
-    "bitcoin": 420,
-    "ethereum": 888,
-    "zcash": 69
+    "portfolio_1": {
+        "bitcoin": 420,
+        "ethereum": 888,
+        "zcash": 69
+    },
+    "portfolio_2": {
+        "ethereum": 0.1,
+        "bitcoin": 0.5,
+        "chainlink": 10,
+        "solana": 2
+    }
 }
