@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from datetime import datetime
 from tabulate import tabulate
+import argparse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -52,7 +53,7 @@ cached_data = load_cached_data()
 portfolio_data = load_portfolio_data()
 
 
-def fetch_data(coin):
+def fetch_data(coin, use_savings=True):
     global cached_data
 
     # Check if data is cached
@@ -104,7 +105,7 @@ def fetch_data(coin):
 def calculate_portfolio_value(portfolio):
     total_value = 0
     for coin, quantity in portfolio.items():
-        price, _, _, _ = fetch_data(coin)
+        price, _, _, _ = fetch_data(coin, use_savings)
         if price is not None:
             total_value += price * quantity
     return total_value
@@ -136,7 +137,7 @@ def generate_pdf_report(portfolio_id):
     )
 
     for coin, quantity in portfolio.items():
-        price, change_1h, change_24h, change_7d = fetch_data(coin)
+        price, change_1h, change_24h, change_7d = fetch_data(coin, use_savings)
 
         if price is not None and all(
             change is not None for change in [change_1h, change_24h, change_7d]
@@ -230,7 +231,7 @@ def display_portfolio(portfolio_id):
     tree.heading("#6", text="Value", command=lambda: sort_column(tree, "#6", False))
 
     for coin, quantity in portfolio.items():
-        price, change_1h, change_24h, change_7d = fetch_data(coin)
+        price, change_1h, change_24h, change_7d = fetch_data(coin, use_savings)
 
         if price is not None and all(
             change is not None for change in [change_1h, change_24h, change_7d]
@@ -263,6 +264,12 @@ def switch_portfolio(portfolio_id):
 
 def main():
     global active_portfolio_id
+
+    parser = argparse.ArgumentParser(description="Coingecko Portfolio Manager")
+    parser.add_argument("--savings", type=str, default="true", help="Enable or disable API calls savings (true/false)")
+    args = parser.parse_args()
+
+    use_savings = args.savings.lower() != "false"
 
     while True:
         print("\n-----------------------------")
@@ -297,7 +304,7 @@ def main():
 
             # Iterate through the portfolio
             for coin, quantity in portfolio.items():
-                price, _, change_24h, _ = fetch_data(coin)
+                price, _, change_24h, _ = fetch_data(coin, use_savings)
                 if price is not None:
                     coin_value = price * quantity
                     table_data.append([coin, quantity, f"${coin_value:.2f}", f"${price:.2f}", f"%{change_24h:.2f}"])
