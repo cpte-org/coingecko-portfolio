@@ -71,6 +71,7 @@ def fetch_data(coin, use_savings=True):
         "busd",
         "aave-v3-usdt",
     ]
+
     if use_savings and coin.lower() in stable_coin_list:
         cached_data[coin] = (1.0, 0.0, 0.0, 0.0)
         save_cached_data()
@@ -78,33 +79,32 @@ def fetch_data(coin, use_savings=True):
 
     url = f"https://api.coingecko.com/api/v3/coins/{coin}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
 
-    # Check if to use API key or not
-    if use_savings:
+    try:
         # Try fetching without API key first
         response = requests.get(url)
-        if response.status_code == 429:  # Rate limit exceeded
-            # If rate limit exceeded, use the API key
+        response.raise_for_status()  # Raise an exception for non-2xx status codes
+    except requests.exceptions.RequestException:
+        try:
+            # If an exception occurred, use the API key
             headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
             response = requests.get(url, headers=headers)
-    else:
-        # Fetch directly with API key
-        headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
-        response = requests.get(url, headers=headers)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to fetch data for {coin}. Error: {e}")
+            return None, None, None, None
 
-    if response.status_code == 200:
-        data = response.json()
-        # Cache the data
-        cached_data[coin] = (
-            data["market_data"]["current_price"]["usd"],
-            data["market_data"]["price_change_percentage_1h_in_currency"]["usd"],
-            data["market_data"]["price_change_percentage_24h_in_currency"]["usd"],
-            data["market_data"]["price_change_percentage_7d_in_currency"]["usd"],
-        )
-        save_cached_data()  # Save cached data to file
-        return cached_data[coin]
-    else:
-        print(f"Failed to fetch data for {coin}.")
-        return None, None, None, None
+    data = response.json()
+
+    # Cache the data
+    cached_data[coin] = (
+        data["market_data"]["current_price"]["usd"],
+        data["market_data"]["price_change_percentage_1h_in_currency"]["usd"],
+        data["market_data"]["price_change_percentage_24h_in_currency"]["usd"],
+        data["market_data"]["price_change_percentage_7d_in_currency"]["usd"],
+    )
+
+    save_cached_data()  # Save cached data to file
+    return cached_data[coin]
 
 
 def calculate_portfolio_value(portfolio, use_savings=True):
@@ -287,7 +287,7 @@ def main():
             headers = ["Coin", "Quantity", "Value", "Price", "24h Change"]
 
             # Print the table
-            print(tabulate(table_data, headers=headers, tablefmt="pretty"))
+            print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
 
             total_value = calculate_portfolio_value(portfolio, use_savings)
             print(f"\nTotal Portfolio Value: ${total_value:.2f}\n")
@@ -295,15 +295,17 @@ def main():
         elif choice == "2":
             # Generate PDF report for the active portfolio
             if active_portfolio_id is None:
-                print("Error: No active portfolio selected.")
-                continue
+                print("Notice: No active portfolio selected. Defaulting to the first portfolio.")
+                portfolio_id = list(portfolio_data.keys())[0]
+                generate_pdf_report(portfolio_id, use_savings)
             generate_pdf_report(active_portfolio_id, use_savings)
             print("PDF report generated successfully.")
         elif choice == "3":
             # Display portfolio GUI for the active portfolio
             if active_portfolio_id is None:
-                print("Error: No active portfolio selected.")
-                continue
+                print("Notice: No active portfolio selected. Defaulting to the first portfolio.")
+                portfolio_id = list(portfolio_data.keys())[0]
+                display_portfolio(portfolio_id, use_savings)
             display_portfolio(active_portfolio_id, use_savings)
         elif choice == "4":
             # Switch active portfolio
