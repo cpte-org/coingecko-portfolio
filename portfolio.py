@@ -1,6 +1,11 @@
 import requests
 import sqlite3
+import json
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class CoinGeckoPortfolioManager:
     def __init__(self, portfolio_id, name, currency='usd'):
@@ -13,7 +18,7 @@ class CoinGeckoPortfolioManager:
         self.create_tables()
 
     def create_tables(self):
-        # Create tables if not exists
+
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS portfolios (
                                 id INTEGER PRIMARY KEY,
                                 name TEXT,
@@ -31,7 +36,6 @@ class CoinGeckoPortfolioManager:
                                 FOREIGN KEY (portfolio_id) REFERENCES portfolios(id)
                                 )''')
         
-        # Create coins table if not exists
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS coins (
                                 id INTEGER PRIMARY KEY,
                                 coin_id TEXT,
@@ -41,7 +45,6 @@ class CoinGeckoPortfolioManager:
         self.conn.commit()
 
     def load_transactions(self):
-        # Load transactions from persistent storage
         self.cursor.execute('''SELECT coin_id, amount, price_per_coin FROM transactions WHERE portfolio_id = ?''', (self.portfolio_id,))
         transactions = self.cursor.fetchall()
         for coin_id, amount, price_per_coin in transactions:
@@ -53,13 +56,12 @@ class CoinGeckoPortfolioManager:
             if current_holding < abs(amount):
                 print("Error: Insufficient holding to sell.")
                 return
-            amount = -abs(amount)  # Ensuring amount is negative
+            amount = -abs(amount)
         
-        # Check if coin exists in coins table
         self.cursor.execute('''SELECT coin_id FROM coins WHERE coin_id = ?''', (coin_id,))
         existing_coin = self.cursor.fetchone()
 
-        if not existing_coin:  # If coin does not exist, insert it
+        if not existing_coin:
             self.cursor.execute('''INSERT INTO coins (coin_id) VALUES (?)''', (coin_id,))
         
         self.cursor.execute('''INSERT INTO transactions (portfolio_id, coin_id, amount, price_per_coin, date, transaction_type) 
@@ -68,16 +70,25 @@ class CoinGeckoPortfolioManager:
         print(f"Transaction added to {self.name}: {transaction_type} {amount} {coin_id} on {date} at price {price_per_coin} {self.currency}")
 
     def update_prices(self):
+        self.load_transactions()
         for coin_id in self.portfolio.keys():
             url = f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
             response = requests.get(url)
             if response.status_code == 200:
                 coin_data = response.json()
                 last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.cursor.execute('''INSERT OR REPLACE INTO coins (coin_id, coin_data, last_updated) VALUES (?, ?, ?)''', (coin_id, str(coin_data), last_updated))
+                self.cursor.execute('''INSERT OR REPLACE INTO coins (coin_id, coin_data, last_updated) VALUES (?, ?, ?)''', (coin_id, json.dumps(coin_data), last_updated))
                 self.conn.commit()
             else:
-                print(f"Failed to update data for {coin_id}. Please try again later.")
+                headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
+                response_with_key = requests.get(url, headers=headers)
+                if response_with_key.status_code == 200:
+                    coin_data = response_with_key.json()
+                    last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.cursor.execute('''INSERT OR REPLACE INTO coins (coin_id, coin_data, last_updated) VALUES (?, ?, ?)''', (coin_id, json.dumps(coin_data), last_updated))
+                    self.conn.commit()
+                else:
+                    print(f"Failed to update data for {coin_id}. Please try again later.")
 
     def get_portfolio_value(self):
         self.load_transactions()
@@ -89,12 +100,14 @@ class CoinGeckoPortfolioManager:
             for transaction in transactions:
                 amount += transaction[0]
             
-            self.cursor.execute('''SELECT coin_data FROM coins WHERE coin_id = ?''', (coin_id,))
+            self.cursor.execute('''SELECT coin_data FROM coins WHERE coin_id = ? ORDER BY last_updated DESC LIMIT 1''', (coin_id,))
             coin_json = self.cursor.fetchone()
-            if coin_json:
-                coin_data = eval(coin_json[0])
+            if coin_json and coin_json[0]:
+                coin_data = json.loads(coin_json[0])
                 price = coin_data['market_data']['current_price'][self.currency]
                 total_value += amount * price
+            else:
+                print(f"No coin data found for {coin_id}. Try updating the prices. Skipping...")
         return total_value
     
     def delete_portfolio(self):
@@ -111,10 +124,11 @@ class CoinGeckoCLI:
         self.load_portfolios()
 
     def load_portfolios(self):
-        self.cursor.execute('''SELECT id, name, currency FROM portfolios''')
+        self.cursor.execute('''SELECT id, name, currency, deleted FROM portfolios WHERE deleted = 0''')
         portfolios = self.cursor.fetchall()
-        for portfolio_id, name, currency in portfolios:
-            self.create_portfolio_object(portfolio_id, name, currency)
+        for portfolio_id, name, currency, deleted in portfolios:
+            if not deleted:
+                self.create_portfolio_object(portfolio_id, name, currency)
 
     def create_portfolio_table(self):
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS portfolios (
@@ -139,8 +153,9 @@ class CoinGeckoCLI:
         print("1. Add Transaction")
         print("2. Update Prices")
         print("3. View Portfolio Value")
-        print("4. Delete Portfolio")
-        print("5. Back")
+        print("4. Import Portfolio")
+        print("5. Delete Portfolio")
+        print("6. Back")
 
     def create_portfolio(self):
         name = input("Enter portfolio name: ")
@@ -153,14 +168,13 @@ class CoinGeckoCLI:
 
     def select_portfolio(self):
         print("\n===== Select Portfolio =====")
-        self.cursor.execute('''SELECT id, name FROM portfolios''')
-        portfolios = self.cursor.fetchall()
+        portfolios = list(self.portfolios.values())
         if not portfolios:
             print("No portfolios available. Please create a portfolio first.")
             return None
 
-        for idx, (portfolio_id, name) in enumerate(portfolios, start=1):
-            print(f"{idx}. {name}")
+        for idx, portfolio in enumerate(portfolios, start=1):
+            print(f"{idx}. {portfolio.name}")
         choice = int(input("Enter portfolio number: "))
         if 1 <= choice <= len(portfolios):
             return portfolios[choice - 1]
@@ -169,29 +183,25 @@ class CoinGeckoCLI:
             return None
 
     def add_transaction(self, portfolio):
-        portfolio_id, name = portfolio
         coin_id = input("Enter coin ID: ")
         amount = float(input("Enter amount: "))
         price_per_coin = float(input("Enter price per coin: "))
         date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         transaction_type = input("Enter transaction type (buy/sell): ").lower()
-        self.portfolios[portfolio_id].add_transaction(coin_id, amount, price_per_coin, date, transaction_type)
+        portfolio.add_transaction(coin_id, amount, price_per_coin, date, transaction_type)
 
     def update_prices(self, portfolio):
-        portfolio_id, name = portfolio
-        self.portfolios[portfolio_id].update_prices()
+        portfolio.update_prices()
         print("Prices updated successfully.")
 
     def view_portfolio_value(self, portfolio):
-        portfolio_id, name = portfolio
-        value = self.portfolios[portfolio_id].get_portfolio_value()
-        print(f"Portfolio value in {self.portfolios[portfolio_id].currency.upper()}: {value}")
+        value = portfolio.get_portfolio_value()
+        print(f"Portfolio value in {portfolio.currency.upper()}: {value}")
 
     def delete_portfolio(self, portfolio):
-        portfolio_id, name = portfolio
-        self.portfolios[portfolio_id].delete_portfolio()
-        del self.portfolios[portfolio_id]
-        print(f"Portfolio '{name}' deleted successfully.")
+        portfolio.delete_portfolio()
+        del self.portfolios[portfolio.portfolio_id]
+        print(f"Portfolio '{portfolio.name}' deleted successfully.")
 
     def run(self):
         while True:
@@ -214,11 +224,28 @@ class CoinGeckoCLI:
                         elif choice == '3':
                             self.view_portfolio_value(portfolio)
                         elif choice == '4':
+                            portfolio_json_path = input("Enter the path to the portfolio.json file: ")
+                            portfolio_json_path = os.path.abspath(os.path.expanduser(portfolio_json_path))
+                            try:
+                                with open(portfolio_json_path, 'r') as f:
+                                    portfolio_data = json.load(f)
+                                    for coin_id, details in portfolio_data.items():
+                                        amount = details['amount']
+                                        price_per_coin = details['price_per_coin']
+                                        date = details['date']
+                                        transaction_type = details['transaction_type']
+                                        portfolio.add_transaction(coin_id, amount, price_per_coin, date, transaction_type)
+                                print("Portfolio imported successfully.")
+                            except FileNotFoundError:
+                                print("File not found. Please check the file path and try again.")
+                            except json.JSONDecodeError:
+                                print("Invalid JSON format in the portfolio file.")
+                        elif choice == '5':
                             confirm = input("Are you sure you want to delete this portfolio? (yes/no): ")
                             if confirm.lower() == 'yes':
                                 self.delete_portfolio(portfolio)
                                 break
-                        elif choice == '5':
+                        elif choice == '6':
                             break
                         else:
                             print("Invalid choice. Please try again.")

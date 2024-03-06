@@ -13,11 +13,11 @@ env/
 
 # Other files
 portfolio.json
-portfolio_backup.json
-*.dat
 
 # Ignore PDF files
 *.pdf
 
 # Ignore DB files
 *.db
+
+OLD/
