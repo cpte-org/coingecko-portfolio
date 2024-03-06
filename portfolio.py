@@ -5,6 +5,8 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
+from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE
+
 load_dotenv()
 
 class CoinGeckoPortfolioManager:
@@ -18,30 +20,9 @@ class CoinGeckoPortfolioManager:
         self.create_tables()
 
     def create_tables(self):
-
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS portfolios (
-                                id INTEGER PRIMARY KEY,
-                                name TEXT,
-                                currency TEXT
-                                )''')
-
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS transactions (
-                                id INTEGER PRIMARY KEY,
-                                portfolio_id INTEGER,
-                                coin_id TEXT,
-                                amount REAL,
-                                price_per_coin REAL,
-                                date TEXT,
-                                transaction_type TEXT,
-                                FOREIGN KEY (portfolio_id) REFERENCES portfolios(id)
-                                )''')
-        
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS coins (
-                                id INTEGER PRIMARY KEY,
-                                coin_id TEXT,
-                                coin_data TEXT,
-                                last_updated TEXT
-                                )''')
+        self.cursor.execute(CREATE_PORTFOLIOS_TABLE)
+        self.cursor.execute(CREATE_TRANSACTIONS_TABLE)
+        self.cursor.execute(CREATE_COINS_TABLE)
         self.conn.commit()
 
     def load_transactions(self):
