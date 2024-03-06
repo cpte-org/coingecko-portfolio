@@ -36,9 +36,9 @@ To get started with the CoinGecko Portfolio Tracker, follow these steps:
    ```
 
 4. **Run the Application:**
-   Run the application by executing the `main.py` file:
+   Run the application by executing the `portfolio.py` file:
    ```bash
-   python main.py
+   python portfolio.py
    ```
 
 5. **Follow On-Screen Instructions:**
