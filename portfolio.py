@@ -1,329 +1,234 @@
-import tkinter as tk
-from tkinter import ttk
 import requests
-import json
-from dotenv import load_dotenv
-import os
-import pickle
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+import sqlite3
 from datetime import datetime
-from tabulate import tabulate
-import argparse
 
-# Load environment variables from .env file
-load_dotenv()
+class CoinGeckoPortfolioManager:
+    def __init__(self, portfolio_id, name, currency='usd'):
+        self.portfolio_id = portfolio_id
+        self.name = name
+        self.portfolio = {}
+        self.currency = currency.lower()
+        self.conn = sqlite3.connect('portfolio.db')
+        self.cursor = self.conn.cursor()
+        self.create_tables()
 
-# Global variable for cached data
-CACHE_FILE = "cached_data.dat"
-PORTFOLIO_FILE = "portfolio.json"
-cached_data = {}
-portfolio_data = {}
+    def create_tables(self):
+        # Create tables if not exists
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS portfolios (
+                                id INTEGER PRIMARY KEY,
+                                name TEXT,
+                                currency TEXT
+                                )''')
 
-# Variable to store the active portfolio ID
-active_portfolio_id = None
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS transactions (
+                                id INTEGER PRIMARY KEY,
+                                portfolio_id INTEGER,
+                                coin_id TEXT,
+                                amount REAL,
+                                price_per_coin REAL,
+                                date TEXT,
+                                transaction_type TEXT,
+                                FOREIGN KEY (portfolio_id) REFERENCES portfolios(id)
+                                )''')
+        
+        # Create coins table if not exists
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS coins (
+                                id INTEGER PRIMARY KEY,
+                                coin_id TEXT,
+                                coin_data TEXT,
+                                last_updated TEXT
+                                )''')
+        self.conn.commit()
 
+    def load_transactions(self):
+        # Load transactions from persistent storage
+        self.cursor.execute('''SELECT coin_id, amount, price_per_coin FROM transactions WHERE portfolio_id = ?''', (self.portfolio_id,))
+        transactions = self.cursor.fetchall()
+        for coin_id, amount, price_per_coin in transactions:
+            self.portfolio[coin_id] = {'amount': amount, 'price': price_per_coin}
 
-def load_cached_data():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "rb") as f:
-            return pickle.load(f)
-    return {}
+    def add_transaction(self, coin_id, amount, price_per_coin, date, transaction_type='buy'):
+        if transaction_type.lower() == 'sell':
+            current_holding = self.portfolio.get(coin_id, {'amount': 0})['amount']
+            if current_holding < abs(amount):
+                print("Error: Insufficient holding to sell.")
+                return
+            amount = -abs(amount)  # Ensuring amount is negative
+        
+        # Check if coin exists in coins table
+        self.cursor.execute('''SELECT coin_id FROM coins WHERE coin_id = ?''', (coin_id,))
+        existing_coin = self.cursor.fetchone()
 
+        if not existing_coin:  # If coin does not exist, insert it
+            self.cursor.execute('''INSERT INTO coins (coin_id) VALUES (?)''', (coin_id,))
+        
+        self.cursor.execute('''INSERT INTO transactions (portfolio_id, coin_id, amount, price_per_coin, date, transaction_type) 
+                            VALUES (?, ?, ?, ?, ?, ?)''', (self.portfolio_id, coin_id, amount, price_per_coin, date, transaction_type))
+        self.conn.commit()
+        print(f"Transaction added to {self.name}: {transaction_type} {amount} {coin_id} on {date} at price {price_per_coin} {self.currency}")
 
-def save_cached_data():
-    with open(CACHE_FILE, "wb") as f:
-        pickle.dump(cached_data, f)
+    def update_prices(self):
+        for coin_id in self.portfolio.keys():
+            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
+            response = requests.get(url)
+            if response.status_code == 200:
+                coin_data = response.json()
+                last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.cursor.execute('''INSERT OR REPLACE INTO coins (coin_id, coin_data, last_updated) VALUES (?, ?, ?)''', (coin_id, str(coin_data), last_updated))
+                self.conn.commit()
+            else:
+                print(f"Failed to update data for {coin_id}. Please try again later.")
 
+    def get_portfolio_value(self):
+        self.load_transactions()
+        total_value = 0
+        for coin_id, coin_data in self.portfolio.items():
+            amount = 0
+            self.cursor.execute('''SELECT amount FROM transactions WHERE portfolio_id = ? AND coin_id = ?''', (self.portfolio_id, coin_id))
+            transactions = self.cursor.fetchall()
+            for transaction in transactions:
+                amount += transaction[0]
+            
+            self.cursor.execute('''SELECT coin_data FROM coins WHERE coin_id = ?''', (coin_id,))
+            coin_json = self.cursor.fetchone()
+            if coin_json:
+                coin_data = eval(coin_json[0])
+                price = coin_data['market_data']['current_price'][self.currency]
+                total_value += amount * price
+        return total_value
+    
+    def delete_portfolio(self):
+        self.cursor.execute('''UPDATE portfolios SET deleted = 1 WHERE id = ?''', (self.portfolio_id,))
+        self.conn.commit()
+        self.conn.close()
 
-def load_portfolio_data():
-    if os.path.exists(PORTFOLIO_FILE):
-        with open(PORTFOLIO_FILE, "r") as f:
-            return json.load(f)
-    return {}
+class CoinGeckoCLI:
+    def __init__(self):
+        self.portfolios = {}
+        self.conn = sqlite3.connect('portfolio.db')
+        self.cursor = self.conn.cursor()
+        self.create_portfolio_table()
+        self.load_portfolios()
 
+    def load_portfolios(self):
+        self.cursor.execute('''SELECT id, name, currency FROM portfolios''')
+        portfolios = self.cursor.fetchall()
+        for portfolio_id, name, currency in portfolios:
+            self.create_portfolio_object(portfolio_id, name, currency)
 
-def save_portfolio_data():
-    with open(PORTFOLIO_FILE, "w") as f:
-        json.dump(portfolio_data, f, indent=4)
+    def create_portfolio_table(self):
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS portfolios (
+                                id INTEGER PRIMARY KEY,
+                                name TEXT,
+                                currency TEXT,
+                                deleted INTEGER DEFAULT 0
+                                )''')
+        self.conn.commit()
 
+    def create_portfolio_object(self, portfolio_id, name, currency):
+        self.portfolios[portfolio_id] = CoinGeckoPortfolioManager(portfolio_id, name, currency)
 
-cached_data = load_cached_data()
-portfolio_data = load_portfolio_data()
+    def menu(self):
+        print("\n===== CoinGecko Portfolio Manager =====")
+        print("1. Create Portfolio")
+        print("2. Manage Portfolios")
+        print("3. Exit")
 
+    def manage_portfolios_menu(self):
+        print("\n===== Manage Portfolios =====")
+        print("1. Add Transaction")
+        print("2. Update Prices")
+        print("3. View Portfolio Value")
+        print("4. Delete Portfolio")
+        print("5. Back")
 
-def fetch_data(coin, use_savings=True):
-    global cached_data
+    def create_portfolio(self):
+        name = input("Enter portfolio name: ")
+        currency = input("Enter currency (default: usd): ").lower() or 'usd'
+        self.cursor.execute('''INSERT INTO portfolios (name, currency) VALUES (?, ?)''', (name, currency))
+        self.conn.commit()
+        portfolio_id = self.cursor.lastrowid
+        self.create_portfolio_object(portfolio_id, name, currency)
+        print(f"Portfolio '{name}' created successfully.")
 
-    # Check if data is cached
-    if coin in cached_data:
-        return cached_data[coin]
+    def select_portfolio(self):
+        print("\n===== Select Portfolio =====")
+        self.cursor.execute('''SELECT id, name FROM portfolios''')
+        portfolios = self.cursor.fetchall()
+        if not portfolios:
+            print("No portfolios available. Please create a portfolio first.")
+            return None
 
-    # Check if the coin is a stable coin
-    stable_coin_list = [
-        "usdd",
-        "usd-coin",
-        "tether",
-        "dai",
-        "husd",
-        "tusd",
-        "busd",
-        "aave-v3-usdt",
-    ]
-
-    if use_savings and coin.lower() in stable_coin_list:
-        cached_data[coin] = (1.0, 0.0, 0.0, 0.0)
-        save_cached_data()
-        return cached_data[coin]
-
-    url = f"https://api.coingecko.com/api/v3/coins/{coin}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
-
-    try:
-        # Try fetching without API key first
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for non-2xx status codes
-    except requests.exceptions.RequestException:
-        try:
-            # If an exception occurred, use the API key
-            headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to fetch data for {coin}. Error: {e}")
-            return None, None, None, None
-
-    data = response.json()
-
-    # Cache the data
-    cached_data[coin] = (
-        data["market_data"]["current_price"]["usd"],
-        data["market_data"]["price_change_percentage_1h_in_currency"]["usd"],
-        data["market_data"]["price_change_percentage_24h_in_currency"]["usd"],
-        data["market_data"]["price_change_percentage_7d_in_currency"]["usd"],
-    )
-
-    save_cached_data()  # Save cached data to file
-    return cached_data[coin]
-
-
-def calculate_portfolio_value(portfolio, use_savings=True):
-    total_value = 0
-    for coin, quantity in portfolio.items():
-        price, _, _, _ = fetch_data(coin, use_savings)
-        if price is not None:
-            total_value += price * quantity
-    return total_value
-
-
-def generate_pdf_report(portfolio_id, use_savings=True):
-    if portfolio_id not in portfolio_data:
-        print("Error: Portfolio ID not found.")
-        return
-
-    portfolio = portfolio_data[portfolio_id]
-
-    # Generate file name with current date
-    file_name = f"portfolio_report_{portfolio_id}.pdf"
-    doc = SimpleDocTemplate(file_name, pagesize=letter)
-    data = [["Coin", "Price", "1h Change", "24h Change", "7d Change", "Quantity", "Value"]]
-
-    for coin, quantity in portfolio.items():
-        price, change_1h, change_24h, change_7d = fetch_data(coin, use_savings)
-        price = price if price is not None else "Price not available"
-        change_1h = f"{change_1h:.2f}%" if change_1h is not None else "N/A"
-        change_24h = f"{change_24h:.2f}%" if change_24h is not None else "N/A"
-        change_7d = f"{change_7d:.2f}%" if change_7d is not None else "N/A"
-        coin_value = price * quantity if isinstance(price, float) else "Value not available"
-        data.append([coin, f"${price:.2f}", change_1h, change_24h, change_7d, str(quantity), f"${coin_value:.2f}"])
-
-    # Add total portfolio value
-    total_value = calculate_portfolio_value(portfolio, use_savings)
-    data.append(["", "", "", "", "", "Total Portfolio Value", f"${total_value:.2f}"])
-
-    # Add date
-    data.append(["", "", "", "", "", "Date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-
-    # Create table
-    table = Table(data)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("FONT", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                ("BACKGROUND", (0, 1), (-1, -2), colors.beige),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-            ]
-        )
-    )
-
-    # Add table to document
-    doc.build([table])
-
-def display_portfolio(portfolio_id, use_savings=True):
-    if portfolio_id not in portfolio_data:
-        print("Error: Portfolio ID not found.")
-        return
-
-    portfolio = portfolio_data[portfolio_id]
-
-    def sort_column(tree, col, reverse):
-        l = [(float(tree.set(k, col)), k) for k in tree.get_children("")]
-        l.sort(reverse=reverse)
-
-        for index, (val, k) in enumerate(l):
-            tree.move(k, "", index)
-
-        tree.heading(col, command=lambda: sort_column(tree, col, not reverse))
-
-    root = tk.Tk()
-    root.title("Portfolio Display")
-
-    title_label = tk.Label(root, text="Coingecko Portfolio", font=("Helvetica", 16, "bold"))
-    title_label.pack()
-
-    total_value_label = tk.Label(
-        root,
-        text=f"Total Portfolio Value: ${calculate_portfolio_value(portfolio, use_savings):.2f}",
-        font=("Helvetica", 12),
-    )
-    total_value_label.pack()
-
-    tree = ttk.Treeview(
-        root, columns=("Coin", "Price", "1h Change", "24h Change", "7d Change", "Quantity", "Value")
-    )
-    tree.heading("#0", text="Coin", command=lambda: sort_column(tree, "#0", False))
-    tree.heading("#1", text="Price", command=lambda: sort_column(tree, "#1", False))
-    tree.heading("#2", text="1h Change", command=lambda: sort_column(tree, "#2", False))
-    tree.heading("#3", text="24h Change", command=lambda: sort_column(tree, "#3", False))
-    tree.heading("#4", text="7d Change", command=lambda: sort_column(tree, "#4", False))
-    tree.heading("#5", text="Quantity", command=lambda: sort_column(tree, "#5", False))
-    tree.heading("#6", text="Value", command=lambda: sort_column(tree, "#6", False))
-
-    for coin, quantity in portfolio.items():
-        price, change_1h, change_24h, change_7d = fetch_data(coin, use_savings)
-
-        if price is not None and all(
-            change is not None for change in [change_1h, change_24h, change_7d]
-        ):
-            coin_value = price * quantity
+        for idx, (portfolio_id, name) in enumerate(portfolios, start=1):
+            print(f"{idx}. {name}")
+        choice = int(input("Enter portfolio number: "))
+        if 1 <= choice <= len(portfolios):
+            return portfolios[choice - 1]
         else:
-            price = price if price is not None else "Price not available"
-            change_1h = f"{change_1h:.2f}%" if change_1h is not None else "N/A"
-            change_24h = f"{change_24h:.2f}%" if change_24h is not None else "N/A"
-            change_7d = f"{change_7d:.2f}%" if change_7d is not None else "N/A"
-            coin_value = (
-                price * quantity if price is not None else "Value not available"
-            )
-        tree.insert(
-            "",
-            "end",
-            text=coin,
-            values=(price, change_1h, change_24h, change_7d, quantity, coin_value),
-        )
+            print("Invalid portfolio number. Please try again.")
+            return None
 
-    tree.pack(expand=True, fill="both")
-    root.mainloop()
+    def add_transaction(self, portfolio):
+        portfolio_id, name = portfolio
+        coin_id = input("Enter coin ID: ")
+        amount = float(input("Enter amount: "))
+        price_per_coin = float(input("Enter price per coin: "))
+        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        transaction_type = input("Enter transaction type (buy/sell): ").lower()
+        self.portfolios[portfolio_id].add_transaction(coin_id, amount, price_per_coin, date, transaction_type)
 
+    def update_prices(self, portfolio):
+        portfolio_id, name = portfolio
+        self.portfolios[portfolio_id].update_prices()
+        print("Prices updated successfully.")
 
-def switch_portfolio(portfolio_id):
-    global active_portfolio_id
-    active_portfolio_id = portfolio_id
-    print(f"Active portfolio switched to: {portfolio_id}")
+    def view_portfolio_value(self, portfolio):
+        portfolio_id, name = portfolio
+        value = self.portfolios[portfolio_id].get_portfolio_value()
+        print(f"Portfolio value in {self.portfolios[portfolio_id].currency.upper()}: {value}")
 
+    def delete_portfolio(self, portfolio):
+        portfolio_id, name = portfolio
+        self.portfolios[portfolio_id].delete_portfolio()
+        del self.portfolios[portfolio_id]
+        print(f"Portfolio '{name}' deleted successfully.")
 
-def main():
-    global active_portfolio_id
+    def run(self):
+        while True:
+            self.menu()
+            choice = input("Enter your choice: ")
 
-    parser = argparse.ArgumentParser(description="Coingecko Portfolio Manager")
-    parser.add_argument("--savings", type=str, default="true", help="Enable or disable API calls savings (true/false)")
-    args = parser.parse_args()
+            if choice == '1':
+                self.create_portfolio()
+            elif choice == '2':
+                portfolio = self.select_portfolio()
+                if portfolio:
+                    while True:
+                        self.manage_portfolios_menu()
+                        choice = input("Enter your choice: ")
 
-    use_savings = args.savings.lower() != "false"
-
-    while True:
-        print("\n-----------------------------")
-        print("  Coingecko Portfolio")
-        print("-----------------------------\n")
-
-        print("1. Refresh Portfolio Data")
-        print("2. Generate PDF Report")
-        print("3. Display Portfolio (GUI)")
-        print("4. Switch Active Portfolio")
-        print("5. Exit")
-
-        choice = input("Enter your choice: ")
-        if choice == "1":
-            print("Available Portfolio IDs:")
-            for index, portfolio_id in enumerate(portfolio_data, start=1):
-                print(f"{index}. {portfolio_id}")
-            portfolio_choice = int(input("Choose Portfolio Number: "))
-            if portfolio_choice < 1 or portfolio_choice > len(portfolio_data):
-                print("Error: Invalid Portfolio Number.")
-                continue
-            portfolio_id = list(portfolio_data.keys())[portfolio_choice - 1]
-
-            portfolio = portfolio_data[portfolio_id]
-
-            # Clear cached data
-            global cached_data
-            cached_data = {}
-            # Initialize a list to store the data
-            table_data = []
-
-            # Iterate through the portfolio
-            for coin, quantity in portfolio.items():
-                price, _, change_24h, _ = fetch_data(coin, use_savings)
-                if price is not None:
-                    coin_value = price * quantity
-                    table_data.append([coin, quantity, f"${coin_value:.2f}", f"${price:.2f}", f"%{change_24h:.2f}"])
-                else:
-                    table_data.append([coin, quantity, "Price not available", "-", "-"])
-
-            # Define headers for the table
-            headers = ["Coin", "Quantity", "Value", "Price", "24h Change"]
-
-            # Print the table
-            print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
-
-            total_value = calculate_portfolio_value(portfolio, use_savings)
-            print(f"\nTotal Portfolio Value: ${total_value:.2f}\n")
-            print("Portfolio data refreshed.")
-        elif choice == "2":
-            # Generate PDF report for the active portfolio
-            if active_portfolio_id is None:
-                print("Notice: No active portfolio selected. Defaulting to the first portfolio.")
-                portfolio_id = list(portfolio_data.keys())[0]
-                generate_pdf_report(portfolio_id, use_savings)
-            generate_pdf_report(active_portfolio_id, use_savings)
-            print("PDF report generated successfully.")
-        elif choice == "3":
-            # Display portfolio GUI for the active portfolio
-            if active_portfolio_id is None:
-                print("Notice: No active portfolio selected. Defaulting to the first portfolio.")
-                portfolio_id = list(portfolio_data.keys())[0]
-                display_portfolio(portfolio_id, use_savings)
-            display_portfolio(active_portfolio_id, use_savings)
-        elif choice == "4":
-            # Switch active portfolio
-            print("Available Portfolio IDs:")
-            for index, portfolio_id in enumerate(portfolio_data, start=1):
-                print(f"{index}. {portfolio_id}")
-            portfolio_choice = int(input("Choose Portfolio Number: "))
-            if portfolio_choice < 1 or portfolio_choice > len(portfolio_data):
-                print("Error: Invalid Portfolio Number.")
-                continue
-            portfolio_id = list(portfolio_data.keys())[portfolio_choice - 1]
-            switch_portfolio(portfolio_id)
-        elif choice == "5":
-            print("Exiting...")
-            break
-        else:
-            print("Invalid choice. Please enter a valid option.")
+                        if choice == '1':
+                            self.add_transaction(portfolio)
+                        elif choice == '2':
+                            self.update_prices(portfolio)
+                        elif choice == '3':
+                            self.view_portfolio_value(portfolio)
+                        elif choice == '4':
+                            confirm = input("Are you sure you want to delete this portfolio? (yes/no): ")
+                            if confirm.lower() == 'yes':
+                                self.delete_portfolio(portfolio)
+                                break
+                        elif choice == '5':
+                            break
+                        else:
+                            print("Invalid choice. Please try again.")
+            elif choice == '3':
+                print("Exiting...")
+                break
+            else:
+                print("Invalid choice. Please try again.")
 
 
 if __name__ == "__main__":
-    main()
+    cli = CoinGeckoCLI()
+    cli.run()
