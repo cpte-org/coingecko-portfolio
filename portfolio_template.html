@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portfolio Value</title>
+    <title>Portfolio Analysis</title>
     <!-- Styles -->
     <style>
         body {
@@ -90,9 +90,10 @@
         }
     
         p {
-            text-align: right;
-            margin-top: 20px;
+            text-align: center;
+            margin-bottom: 10px;
             color: inherit;
+            font-weight: bold;
         }
     
         .dark-mode-toggle {
@@ -111,13 +112,19 @@
             transform: rotate(180deg);
         }
 
-        #pie-chart-container {
+        #pie-chart-container, #bar-chart-container {
             text-align: center;
+            width: 50%;
+            margin: auto;
         }
 
-        #pie-chart {
+        #pie-chart, #bar-chart {
             max-width: 100%;
             height: auto;
+        }
+
+        .chart-container {
+            margin-top: 20px;
         }
     </style>
     
@@ -135,32 +142,48 @@
                 return;
             }
 
-            let table = "<h1>Portfolio Value</h1>";
-            table += "<table id='portfolio-table' class='tablesorter'><thead><tr><th>Coin ID<span class='sort-arrow'></span></th><th>Amount<span class='sort-arrow'></span></th><th>Price<span class='sort-arrow'></span></th><th>Value<span class='sort-arrow'></span></th></tr></thead><tbody>";
-
-            let totalValue = 0;
+            let table = "<h1>Portfolio Analysis</h1>";
+            table += `<p>Total Portfolio Value: $${calculateTotalPortfolioValue(portfolioValue).toFixed(2)}</p>`;
+            table += "<table id='portfolio-table' class='tablesorter'><thead><tr><th>Cryptocurrency<span class='sort-arrow'></span></th><th>Amount<span class='sort-arrow'></span></th><th>Price (USD)<span class='sort-arrow'></span></th><th>Value (USD)<span class='sort-arrow'></span></th></tr></thead><tbody>";
 
             for (let coinId in portfolioValue.coins) {
                 let details = portfolioValue.coins[coinId];
                 let amount = details.amount;
                 let price = details.price;
                 let value = amount * price;
-                totalValue += value;
                 table += `<tr><td>${coinId}</td><td>${amount}</td><td>$${price.toFixed(2)}</td><td>$${value.toFixed(2)}</td></tr>`;
             }
 
             table += "</tbody></table>";
-            table += `<p>Total Portfolio Value: $${totalValue.toFixed(2)}</p>`;
 
             document.getElementById("portfolio").innerHTML = table;
 
             $("#portfolio-table").tablesorter();
 
             // Generate Pie Chart
+            generatePieChart(portfolioValue);
+
+            // Generate Bar Chart
+            generateBarChart(portfolioValue);
+        }
+
+        function calculateTotalPortfolioValue(portfolioValue) {
+            let totalValue = 0;
+
+            for (let coinId in portfolioValue.coins) {
+                let details = portfolioValue.coins[coinId];
+                let amount = details.amount;
+                let price = details.price;
+                totalValue += amount * price;
+            }
+
+            return totalValue;
+        }
+
+        function generatePieChart(portfolioValue) {
             let ctx = document.getElementById('pie-chart').getContext('2d');
             let labels = [];
             let data = [];
-            let totalUSDValue = 0;
 
             for (let coinId in portfolioValue.coins) {
                 labels.push(coinId);
@@ -168,15 +191,14 @@
                 let price = portfolioValue.coins[coinId].price;
                 let value = amount * price;
                 data.push(value);
-                totalUSDValue += value;
             }
 
-            let pieChart = new Chart(ctx, {
+            new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Coin Distribution',
+                        label: 'Cryptocurrency Distribution',
                         data: data,
                         backgroundColor: [
                             'rgba(255, 99, 132, 0.5)',
@@ -191,9 +213,75 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Cryptocurrency Distribution'
+                        }
+                    }
                 }
             });
+        }
+
+        function generateBarChart(portfolioValue) {
+            let ctx = document.getElementById('bar-chart').getContext('2d');
+            let stableCoinTotal = 0;
+            let totalValue = calculateTotalPortfolioValue(portfolioValue);
+
+            for (let coinId in portfolioValue.coins) {
+                if (isStableCoin(coinId)) {
+                    stableCoinTotal += portfolioValue.coins[coinId].amount * portfolioValue.coins[coinId].price;
+                }
+            }
+
+            let data = [stableCoinTotal, totalValue - stableCoinTotal];
+            let labels = ['Stable Coins', 'Other Coins'];
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Allocation',
+                        data: data,
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.5)',
+                            'rgba(54, 162, 235, 0.5)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Allocation'
+                        }
+                    }
+                }
+            });
+        }
+
+        function isStableCoin(coinId) {
+            const stable_coin_list = [
+                "usdd",
+                "usd-coin",
+                "tether",
+                "dai",
+                "husd",
+                "tusd",
+                "busd",
+                "aave-v3-usdt",
+                "binance-usd"
+            ];
+            return stable_coin_list.includes(coinId);
         }
 
         window.onload = function() {
@@ -219,8 +307,13 @@
     <div id="portfolio"></div>
     
     <!-- Pie Chart Container -->
-    <div id="pie-chart-container">
-        <canvas id="pie-chart" width="500" height="500" aria-label="Pie Chart"></canvas>
+    <div id="pie-chart-container" class="chart-container">
+        <canvas id="pie-chart" width="400" height="400" aria-label="Pie Chart"></canvas>
+    </div>
+
+    <!-- Bar Chart Container -->
+    <div id="bar-chart-container" class="chart-container">
+        <canvas id="bar-chart" width="400" height="400" aria-label="Bar Chart"></canvas>
     </div>
 </body>
 </html>
