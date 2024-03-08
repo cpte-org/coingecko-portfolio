@@ -1,2 +1,0 @@
-feat: add coinmarketcap api support
-feat: implement super saving by skipping the stable coins

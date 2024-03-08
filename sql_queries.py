@@ -30,3 +30,11 @@ CREATE TABLE IF NOT EXISTS coins (
     last_updated TEXT
 )
 '''
+
+CREATE_COINSIDS_TABLE = '''
+CREATE TABLE IF NOT EXISTS coins_ids (
+    coin_id TEXT PRIMARY KEY,
+    symbol TEXT,
+    name TEXT
+)
+'''

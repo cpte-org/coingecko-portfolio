@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import webbrowser
-from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE
+from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE, CREATE_COINSIDS_TABLE
 
 load_dotenv()
 
@@ -24,6 +24,7 @@ class CoinGeckoPortfolioManager:
         self.cursor.execute(CREATE_PORTFOLIOS_TABLE)
         self.cursor.execute(CREATE_TRANSACTIONS_TABLE)
         self.cursor.execute(CREATE_COINS_TABLE)
+        self.cursor.execute(CREATE_COINSIDS_TABLE)
         self.conn.commit()
 
     def load_transactions(self):
@@ -185,10 +186,44 @@ class CoinGeckoCLI:
     def create_portfolio_object(self, portfolio_id, name, currency):
         self.portfolios[portfolio_id] = CoinGeckoPortfolioManager(portfolio_id, name, currency)
 
+    def refresh_coingecko_list(self):
+        print("Refreshing CoinGecko coin list...")
+        url = "https://api.coingecko.com/api/v3/coins/list"
+        headers = {"x-cg-demo-api-key": os.getenv("API_KEY")}
+        response = requests.get(url, headers = headers)
+
+        if response.status_code == 200:
+            coin_list = response.json()
+
+            # Check if the coin is already listed in the database
+            existing_coins = set()
+            self.cursor.execute("SELECT coin_id FROM coins_ids")
+            for row in self.cursor.fetchall():
+                existing_coins.add(row[0])
+
+            # Insert new coin data into the coins_ids table
+            new_coins = []
+            for coin in coin_list:
+                coin_id = coin['id']
+                if coin_id not in existing_coins:
+                    new_coins.append((coin_id, coin['symbol'], coin['name']))
+
+            if new_coins:
+                self.cursor.executemany("INSERT INTO coins_ids (coin_id, symbol, name) VALUES (?, ?, ?)", new_coins)
+                self.conn.commit()
+                print(f"{len(new_coins)} new coins added.")
+            else:
+                print("No new coins found.")
+
+            print("CoinGecko coin list refreshed successfully.")
+        else:
+            print("Failed to refresh CoinGecko coin list. Please try again later.")
+
     def menu(self):
         print("\n===== CoinGecko Portfolio Manager =====")
         print("1. Create Portfolio")
         print("2. Manage Portfolios")
+        print("3. Refresh Coins list")
         print("0. Exit")
 
     def manage_portfolios_menu(self):
@@ -226,13 +261,68 @@ class CoinGeckoCLI:
             print("Invalid portfolio number. Please try again.")
             return None
 
+    def get_coin_suggestions(self, query, page=1, items_per_page=5):
+        """
+        Get coin suggestions based on the user query and pagination parameters.
+        """
+        query = query.lower()
+        offset = (page - 1) * items_per_page
+        self.cursor.execute("SELECT coin_id, symbol, name FROM coins_ids WHERE coin_id LIKE ? OR symbol LIKE ? OR name LIKE ? OR name LIKE ? OR name LIKE ? LIMIT ? OFFSET ?",
+                            (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%", items_per_page, offset))
+        return self.cursor.fetchall()
+
+    def get_coin_url(self, coin_id):
+        """
+        Get the CoinGecko URL for a given coin ID.
+        """
+        url = f"https://www.coingecko.com/en/coins/{coin_id}"
+        return url
+
     def add_transaction(self, portfolio):
-        coin_id = input("Enter coin ID: ")
-        amount = float(input("Enter amount: "))
-        price_per_coin = float(input("Enter price per coin: "))
-        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        transaction_type = input("Enter transaction type (buy/sell): ").lower()
-        portfolio.add_transaction(coin_id, amount, price_per_coin, date, transaction_type)
+        coin_input = input("Enter coin ID, symbol, or name: ")
+        coin_id = None  # Initialize coin_id variable
+        page = 1
+        while True:
+            suggestions = self.get_coin_suggestions(coin_input, page=page)
+
+            if suggestions:
+                print("Suggestions:")
+                for idx, suggestion in enumerate(suggestions, start=1):
+                    coin_id, symbol, name = suggestion
+                    coin_url = self.get_coin_url(coin_id)
+                    print(f"{idx}. {symbol} - {name} (ID: {coin_id})")
+                    print(f"   CoinGecko URL: {coin_url}")
+
+                choice = input("Enter the number of the correct coin, press n for next page, press p for previous page, or press 0 to cancel: ")
+                if choice.isdigit() and int(choice) == 0:
+                    print("Transaction canceled.")
+                    return
+                elif choice == 'n':
+                    page += 1
+                elif choice == 'p' and page > 1:
+                    page -= 1
+                elif choice.isdigit() and 1 <= int(choice) <= len(suggestions):
+                    coin_id = suggestions[int(choice) - 1][0]
+                    break  # Break out of the loop if a valid choice is made
+                else:
+                    print("Invalid choice.")
+            else:
+                print("No suggestions found.")
+                break  # Break out of the loop if there are no suggestions for the current page
+
+        if coin_id is not None:  # Check if a valid coin ID was selected
+            # Here, you can ask the user to confirm the coin_id if needed
+            confirm = input(f"Are you sure you want to use '{coin_id}'? (yes/no): ")
+            if confirm.lower() == 'yes':
+                amount = float(input("Enter amount: "))
+                price_per_coin = float(input("Enter price per coin: "))
+                date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                transaction_type = input("Enter transaction type (buy/sell): ").lower()
+                portfolio.add_transaction(coin_id, amount, price_per_coin, date, transaction_type)
+            else:
+                print("Transaction canceled.")
+        else:
+            print("No valid coin ID selected. Transaction canceled.")
 
     def modify_transactions(self, portfolio):
         portfolio.modify_transactions()
@@ -314,6 +404,8 @@ class CoinGeckoCLI:
                             break
                         else:
                             print("Invalid choice. Please try again.")
+            elif choice == '3':
+                self.refresh_coingecko_list()
             elif choice == '0':
                 print("Exiting...")
                 break
