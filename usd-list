@@ -1,0 +1,11 @@
+stable_coin_list = [
+        "usdd",
+        "usd-coin",
+        "tether",
+        "dai",
+        "husd",
+        "tusd",
+        "busd",
+        "aave-v3-usdt",
+        "binance-usd"
+    ]
