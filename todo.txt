@@ -1,3 +1,4 @@
-merge the two coins tables
-the historical price and amounts data can be used to reconstruct the portfolio value over time. every time the user update prices, its a time point.
-when user update prices, the results get stored in one 
+[portfolio.py] merge the two coins tables
+[portfolio.py] the historical price and amounts data can be used to reconstruct the portfolio value over time. every time the user update prices, its a time point.
+[portfolio.py] when user update prices, the results get stored in one 
+[portfolio template] constructing the coingecko links and present coins' logos (retrieved from the local db)

@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS coins (
 )
 '''
 
-CREATE_COINSIDS_TABLE = '''
-CREATE TABLE IF NOT EXISTS coins_ids (
+CREATE_CRYPTOLOOKUP_TABLE = '''
+CREATE TABLE IF NOT EXISTS crypto_lookup (
     coin_id TEXT PRIMARY KEY,
     symbol TEXT,
     name TEXT

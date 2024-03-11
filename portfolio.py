@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import webbrowser
-from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE, CREATE_COINSIDS_TABLE
+from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE, CREATE_CRYPTOLOOKUP_TABLE
 
 load_dotenv()
 
@@ -24,7 +24,7 @@ class CoinGeckoPortfolioManager:
         self.cursor.execute(CREATE_PORTFOLIOS_TABLE)
         self.cursor.execute(CREATE_TRANSACTIONS_TABLE)
         self.cursor.execute(CREATE_COINS_TABLE)
-        self.cursor.execute(CREATE_COINSIDS_TABLE)
+        self.cursor.execute(CREATE_CRYPTOLOOKUP_TABLE)
         self.conn.commit()
 
     def load_transactions(self):
@@ -197,11 +197,11 @@ class CoinGeckoCLI:
 
             # Check if the coin is already listed in the database
             existing_coins = set()
-            self.cursor.execute("SELECT coin_id FROM coins_ids")
+            self.cursor.execute("SELECT coin_id FROM crypto_lookup")
             for row in self.cursor.fetchall():
                 existing_coins.add(row[0])
 
-            # Insert new coin data into the coins_ids table
+            # Insert new coin data into the crypto_lookup table
             new_coins = []
             for coin in coin_list:
                 coin_id = coin['id']
@@ -209,7 +209,7 @@ class CoinGeckoCLI:
                     new_coins.append((coin_id, coin['symbol'], coin['name']))
 
             if new_coins:
-                self.cursor.executemany("INSERT INTO coins_ids (coin_id, symbol, name) VALUES (?, ?, ?)", new_coins)
+                self.cursor.executemany("INSERT INTO crypto_lookup (coin_id, symbol, name) VALUES (?, ?, ?)", new_coins)
                 self.conn.commit()
                 print(f"{len(new_coins)} new coins added.")
             else:
@@ -267,7 +267,7 @@ class CoinGeckoCLI:
         """
         query = query.lower()
         offset = (page - 1) * items_per_page
-        self.cursor.execute("SELECT coin_id, symbol, name FROM coins_ids WHERE coin_id LIKE ? OR symbol LIKE ? OR name LIKE ? OR name LIKE ? OR name LIKE ? LIMIT ? OFFSET ?",
+        self.cursor.execute("SELECT coin_id, symbol, name FROM crypto_lookup WHERE coin_id LIKE ? OR symbol LIKE ? OR name LIKE ? OR name LIKE ? OR name LIKE ? LIMIT ? OFFSET ?",
                             (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%", items_per_page, offset))
         return self.cursor.fetchall()
 
