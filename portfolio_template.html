@@ -64,7 +64,7 @@
             color: #fff;
         }
 
-        #pie-chart-container, #bar-chart-container {
+        #pie-chart-container, #bar-chart-container, #line-chart-container {
             text-align: center;
             width: 90%;
             max-width: 600px;
@@ -75,12 +75,12 @@
             padding: 20px;
         }
 
-        .dark-mode #pie-chart-container, .dark-mode #bar-chart-container {
+        .dark-mode #pie-chart-container, .dark-mode #bar-chart-container, .dark-mode #line-chart-container {
             background-color: #2c2c2e;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
         }
 
-        #pie-chart, #bar-chart {
+        #pie-chart, #bar-chart, #line-chart {
             max-width: 100%;
             height: auto;
         }
@@ -146,6 +146,11 @@
         <canvas id="bar-chart" width="400" height="400" aria-label="Bar Chart"></canvas>
     </div>
 
+    <!-- Line Chart Container -->
+    <div id="line-chart-container" class="chart-container">
+        <canvas id="line-chart" width="400" height="400" aria-label="Line Chart"></canvas>
+    </div>
+
     <!-- External Scripts -->
     <script src="js/jquery.min.js"></script>
     <script src="js/tabulator.min.js"></script>
@@ -173,10 +178,15 @@
             }
         }
 
-        function displayPortfolioValue(portfolioValue) {
+        function displayPortfolioValue(portfolioValue, portfolioHistory) {
             // Ensure portfolioValue is valid
             if (!portfolioValue || typeof portfolioValue !== 'object' || !portfolioValue.coins) {
                 console.error('Invalid portfolio data.');
+                return;
+            }
+            // Ensure portfolioHistory is valid
+            if (!portfolioHistory || typeof portfolioHistory !== 'object' || !portfolioHistory.data) {
+                console.error('Invalid portfolio history data.');
                 return;
             }
 
@@ -212,6 +222,9 @@
 
             // Generate Bar Chart
             generateBarChart(portfolioValue);
+
+            // Generate Line Chart
+            generateLineChart(portfolioHistory);
         }
 
         function generatePieChart(portfolioValue) {
@@ -311,6 +324,41 @@
             });
         }
 
+        function generateLineChart(portfolioHistory) {
+            let ctx = document.getElementById('line-chart').getContext('2d');
+            let labels = [];
+            let data = [];
+
+            for (let key in portfolioHistory.data) {
+                let portfolioData = portfolioHistory.data[key].portfolio_data;
+                let totalValue = calculateTotalPortfolioValue(portfolioData);
+                let timestamp = portfolioHistory.data[key].last_updated;
+                labels.push(timestamp);
+                data.push(totalValue);
+            }
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total Portfolio Value',
+                        data: data,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
         function calculateTotalPortfolioValue(portfolioValue) {
             let totalValue = 0;
 
@@ -331,7 +379,9 @@
 
         window.onload = function() {
             let portfolioValue = {{portfolio_value}};
-            displayPortfolioValue(portfolioValue);
+            let portfolioHistory = {{portfolio_history}};
+            
+            displayPortfolioValue(portfolioValue, portfolioHistory);
         };
 
         $(document).ready(function() {

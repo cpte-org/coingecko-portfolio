@@ -2,10 +2,11 @@ import requests
 import sqlite3
 import json
 from datetime import datetime
+import time
 import os
 from dotenv import load_dotenv
 import webbrowser
-from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE, CREATE_CRYPTOLOOKUP_TABLE
+from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE, CREATE_CRYPTOLOOKUP_TABLE, CREATE_HISTORY_TABLE
 
 load_dotenv()
 
@@ -25,6 +26,7 @@ class CoinGeckoPortfolioManager:
         self.cursor.execute(CREATE_TRANSACTIONS_TABLE)
         self.cursor.execute(CREATE_COINS_TABLE)
         self.cursor.execute(CREATE_CRYPTOLOOKUP_TABLE)
+        self.cursor.execute(CREATE_HISTORY_TABLE)
         self.conn.commit()
 
     def load_transactions(self):
@@ -108,6 +110,7 @@ class CoinGeckoPortfolioManager:
 
     def update_prices(self):
         self.load_transactions()
+        all_prices_fetched = True
         for coin_id in self.portfolio.keys():
             url = f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
             response = requests.get(url)
@@ -130,6 +133,20 @@ class CoinGeckoPortfolioManager:
                     self.conn.commit()
                 else:
                     print(f"Failed to update data for {coin_id}. Please try again later.")
+                    all_prices_fetched = False
+
+        # Store into history table only if prices for all coins were successfully fetched
+        if all_prices_fetched:
+            time.sleep(1) 
+            portfolio_data = self.get_portfolio_value()
+            portfolio_id = self.portfolio_id
+            date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.cursor.execute(
+                '''INSERT INTO history (portfolio_id, portfolio_data, last_updated) VALUES (?, ?, ?)''',
+                (portfolio_id, json.dumps(portfolio_data), date))
+            self.conn.commit()
+        else:
+            print("Not storing into history table because prices for all coins were not fetched successfully.")
 
     def get_portfolio_value(self):
         self.load_transactions()
@@ -152,6 +169,27 @@ class CoinGeckoPortfolioManager:
                 portfolio_data['coins'][coin_id] = {'amount': amount, 'price': price}
 
         return portfolio_data
+    
+    def get_portfolio_history(self):
+        historic_portfolio_data = {'data': {}}
+        
+        # Retrieve historical data for the portfolio from the history table
+        self.cursor.execute('''SELECT portfolio_data, last_updated FROM history WHERE portfolio_id = ? ORDER BY last_updated DESC''', (self.portfolio_id,))
+        history_entries = self.cursor.fetchall()
+        
+        # Check if historical data exists
+        if history_entries:
+            for idx, entry in enumerate(history_entries, start=1):
+                portfolio_data_json, last_updated = entry
+                portfolio_data = json.loads(portfolio_data_json)
+                historic_portfolio_data['data'][idx] = {
+                    'portfolio_data': portfolio_data,
+                    'last_updated': last_updated
+                }
+        else:
+            print("No historical data found for this portfolio.")
+
+        return historic_portfolio_data
 
     def delete_portfolio(self):
         self.cursor.execute('''UPDATE portfolios SET deleted = 1 WHERE id = ?''', (self.portfolio_id,))
@@ -331,8 +369,9 @@ class CoinGeckoCLI:
         portfolio.update_prices()
         print("Prices updated successfully.")
 
-    def view_portfolio_value(self, portfolio, display_mode='cli'):
+    def view_portfolio(self, portfolio, display_mode='cli'):
         portfolio_value = portfolio.get_portfolio_value()
+        portfolio_history = portfolio.get_portfolio_history()
         if display_mode == 'cli':
             print("Portfolio Value:")
             print(json.dumps(portfolio_value, indent=4))
@@ -340,6 +379,7 @@ class CoinGeckoCLI:
             with open("portfolio_template.html", "r") as template_file:
                 template_content = template_file.read()
             template_content = template_content.replace("{{portfolio_value}}", json.dumps(portfolio_value))
+            template_content = template_content.replace("{{portfolio_history}}", json.dumps(portfolio_history))
             with open("portfolio_value.html", "w") as output_file:
                 output_file.write(template_content)
             webbrowser.open_new_tab("portfolio_value.html")
@@ -374,7 +414,7 @@ class CoinGeckoCLI:
                             self.update_prices(portfolio)
                         elif choice == '3':
                             display_mode = input("Choose display mode (cli/web): ")
-                            self.view_portfolio_value(portfolio, display_mode)
+                            self.view_portfolio(portfolio, display_mode)
                         elif choice == '4':
                             portfolio_json_path = input("Enter the path to the portfolio.json file: ")
                             portfolio_json_path = os.path.abspath(os.path.expanduser(portfolio_json_path))

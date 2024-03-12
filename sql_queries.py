@@ -38,3 +38,12 @@ CREATE TABLE IF NOT EXISTS crypto_lookup (
     name TEXT
 )
 '''
+
+CREATE_HISTORY_TABLE = '''
+CREATE TABLE IF NOT EXISTS history (
+    id INTEGER PRIMARY KEY,
+    portfolio_id INTEGER,
+    portfolio_data TEXT,
+    last_updated TEXT
+)
+'''
