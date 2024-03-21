@@ -37,8 +37,18 @@ class CoinGeckoPortfolioManager:
             self.portfolio[coin_id] = {'amount': amount, 'price': price_per_coin}
 
     def add_transaction(self, coin_id, amount, price_per_coin, date, transaction_type='buy'):
+
+        self.load_transactions()
+
         if transaction_type.lower() == 'sell':
-            current_holding = self.portfolio.get(coin_id, {'amount': 0})['amount']
+            current_holding = 0
+
+            self.cursor.execute('''SELECT amount FROM transactions WHERE portfolio_id = ? AND coin_id = ?''',
+                                (self.portfolio_id, coin_id))
+            transactions = self.cursor.fetchall()
+            for transaction in transactions:
+                current_holding += transaction[0]
+
             if current_holding < abs(amount):
                 print("Error: Insufficient holding to sell.")
                 return
@@ -166,7 +176,12 @@ class CoinGeckoPortfolioManager:
             if coin_json and coin_json[0]:
                 coin_data = json.loads(coin_json[0])
                 price = coin_data['market_data']['current_price'][self.currency]
-                portfolio_data['coins'][coin_id] = {'amount': amount, 'price': price}
+
+                price_change_1h = coin_data['market_data']['price_change_percentage_1h_in_currency'][self.currency]
+                price_change_24h = coin_data['market_data']['price_change_percentage_24h_in_currency'][self.currency]
+                price_change_7d = coin_data['market_data']['price_change_percentage_7d_in_currency'][self.currency]
+
+                portfolio_data['coins'][coin_id] = {'amount': amount, 'price': price, 'price_change_1h': price_change_1h, 'price_change_24h': price_change_24h, 'price_change_7d': price_change_7d}
 
         return portfolio_data
     
@@ -352,7 +367,12 @@ class CoinGeckoCLI:
             # Here, you can ask the user to confirm the coin_id if needed
             confirm = input(f"Are you sure you want to use '{coin_id}'? (yes/no): ")
             if confirm.lower() == 'yes':
-                amount = float(input("Enter amount: "))
+                while True:
+                    try:
+                        amount = float(input("Enter amount: "))
+                        break  # Break out of the loop if input is successfully converted to float
+                    except ValueError:
+                        print("Invalid input. Please enter a valid number for the amount.")
                 price_per_coin = float(input("Enter price per coin: "))
                 date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 transaction_type = input("Enter transaction type (buy/sell): ").lower()

@@ -2,3 +2,5 @@
 [portfolio.py] the historical price and amounts data can be used to reconstruct the portfolio value over time. every time the user update prices, its a time point.
 [portfolio.py] when user update prices, the results get stored in one 
 [portfolio template] constructing the coingecko links and present coins' logos (retrieved from the local db)
+
+[portfolio.py] implement 1h-24h-7d change percentage in the portfolio_view

@@ -41,6 +41,14 @@
             padding: 20px;
         }
 
+        .positive-change {
+            color: #00FF00;
+        }
+
+        .negative-change {
+            color: #FF3333;
+        }
+
         .dark-mode #portfolio {
             background-color: #2c2c2e;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
@@ -160,7 +168,7 @@
     <!-- Script -->
     <script>
         const coinGrouping = {
-            tether: ['tether', 'usd-coin', 'dai', 'usdd', 'aave-v3-usdt', 'binance-usd'],
+            tether: ['tether', 'usd-coin', 'dai', 'usdd', 'aave-v3-usdt', 'binance-usd', 'aave-polygon-usdc', 'aave-polygon-usdt'],
             celestia: ['celestia', 'stride-staked-tia'],
             ethereum: ['ethereum', 'staked-ether', 'rocket-pool-eth']
         };
@@ -199,16 +207,32 @@
                 let price = details.price;
                 let value = amount * price;
                 totalValue += value;
-                tableData.push({ Cryptocurrency: coinId, Amount: amount, 'Price (USD)': price.toFixed(2), 'Value (USD)': value.toFixed(2) });
+
+                let price_change_1h = details.price_change_1h;
+                let price_change_24h  = details.price_change_24h;
+                let price_change_7d  = details.price_change_7d;
+                
+                tableData.push({
+                    Cryptocurrency: coinId,
+                    Amount: amount,
+                    'Price (USD)': price.toFixed(2),
+                    'price_change_1h': price_change_1h.toFixed(2),
+                    'price_change_24h': price_change_24h.toFixed(2),
+                    'price_change_7d': price_change_7d.toFixed(2),
+                    'Value (USD)': value.toFixed(2)
+                });
             }
 
             let table = new Tabulator("#portfolio", {
                 data: tableData,
                 layout: "fitColumns",
                 columns: [
-                    { title: "Cryptocurrency", field: "Cryptocurrency" },
+                    { title: "Coin", field: "Cryptocurrency" },
                     { title: "Amount", field: "Amount" },
                     { title: "Price (USD)", field: "Price (USD)" },
+                    { title: "1H", field: "price_change_1h", formatter: priceChangeFormatter },
+                    { title: "24H", field: "price_change_24h", formatter: priceChangeFormatter },
+                    { title: "7D", field: "price_change_7d" , formatter: priceChangeFormatter },
                     { title: "Value (USD)", field: "Value (USD)" }
                 ],
                 initialSort: [{ column: "Cryptocurrency", dir: "asc" }]
@@ -225,6 +249,14 @@
 
             // Generate Line Chart
             generateLineChart(portfolioHistory);
+        }
+
+        // Formatter function for price change columns
+        function priceChangeFormatter(cell, formatterParams, onRendered) {
+            let value = parseFloat(cell.getValue());
+            let formattedValue = value.toFixed(2);
+            let className = value > 0 ? 'positive-change' : 'negative-change';
+            return `<span class="${className}">${formattedValue}</span>`;
         }
 
         function generatePieChart(portfolioValue) {
@@ -333,8 +365,8 @@
                 let portfolioData = portfolioHistory.data[key].portfolio_data;
                 let totalValue = calculateTotalPortfolioValue(portfolioData);
                 let timestamp = portfolioHistory.data[key].last_updated;
-                labels.push(timestamp);
-                data.push(totalValue);
+                labels.unshift(timestamp); // Reverse the order of labels
+                data.unshift(totalValue); // Reverse the order of data
             }
 
             new Chart(ctx, {
