@@ -4,3 +4,8 @@
 [portfolio template] constructing the coingecko links and present coins' logos (retrieved from the local db)
 
 [portfolio.py] implement 1h-24h-7d change percentage in the portfolio_view
+
+migrate the portfolio code to full javascript
+
+add support to coinpaprika api. openapi specification: ```https://raw.githubusercontent.com/coinpaprika/coinpaprika.github.io/master/1.7/openapi/index.yml```
+    https://api.coinpaprika.com/
