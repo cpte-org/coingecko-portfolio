@@ -177,9 +177,9 @@ class CoinGeckoPortfolioManager:
                 coin_data = json.loads(coin_json[0])
                 price = coin_data['market_data']['current_price'][self.currency]
 
-                price_change_1h = coin_data['market_data']['price_change_percentage_1h_in_currency'][self.currency]
-                price_change_24h = coin_data['market_data']['price_change_percentage_24h_in_currency'][self.currency]
-                price_change_7d = coin_data['market_data']['price_change_percentage_7d_in_currency'][self.currency]
+                price_change_1h = coin_data['market_data']['price_change_percentage_1h_in_currency'].get(self.currency, 0)
+                price_change_24h = coin_data['market_data']['price_change_percentage_24h_in_currency'].get(self.currency, 0)
+                price_change_7d = coin_data['market_data']['price_change_percentage_7d_in_currency'].get(self.currency, 0)
 
                 portfolio_data['coins'][coin_id] = {'amount': amount, 'price': price, 'price_change_1h': price_change_1h, 'price_change_24h': price_change_24h, 'price_change_7d': price_change_7d}
 

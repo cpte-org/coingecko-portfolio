@@ -5,7 +5,7 @@
 
 [portfolio.py] implement 1h-24h-7d change percentage in the portfolio_view
 
-migrate the portfolio code to full javascript
+migrate the portfolio code to full javascript. indexedDB: ```https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API```
 
 add support to coinpaprika api. openapi specification: ```https://raw.githubusercontent.com/coinpaprika/coinpaprika.github.io/master/1.7/openapi/index.yml```
     https://api.coinpaprika.com/

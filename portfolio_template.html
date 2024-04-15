@@ -72,7 +72,7 @@
             color: #fff;
         }
 
-        #pie-chart-container, #bar-chart-container, #line-chart-container {
+        #pie-chart-container, #line-chart-container {
             text-align: center;
             width: 90%;
             max-width: 600px;
@@ -83,12 +83,12 @@
             padding: 20px;
         }
 
-        .dark-mode #pie-chart-container, .dark-mode #bar-chart-container, .dark-mode #line-chart-container {
+        .dark-mode #pie-chart-container, .dark-mode #line-chart-container {
             background-color: #2c2c2e;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
         }
 
-        #pie-chart, #bar-chart, #line-chart {
+        #pie-chart, #line-chart {
             max-width: 100%;
             height: auto;
         }
@@ -149,11 +149,6 @@
         <canvas id="pie-chart" width="400" height="400" aria-label="Pie Chart"></canvas>
     </div>
 
-    <!-- Bar Chart Container -->
-    <div id="bar-chart-container" class="chart-container">
-        <canvas id="bar-chart" width="400" height="400" aria-label="Bar Chart"></canvas>
-    </div>
-
     <!-- Line Chart Container -->
     <div id="line-chart-container" class="chart-container">
         <canvas id="line-chart" width="400" height="400" aria-label="Line Chart"></canvas>
@@ -172,6 +167,8 @@
             celestia: ['celestia', 'stride-staked-tia'],
             ethereum: ['ethereum', 'staked-ether', 'rocket-pool-eth']
         };
+
+        let groupStableCoins = true; // Variable to control whether to group stable coins or not
 
         function toggleDarkMode() {
             $("body").toggleClass("dark-mode");
@@ -244,9 +241,6 @@
             // Generate Pie Chart
             generatePieChart(portfolioValue);
 
-            // Generate Bar Chart
-            generateBarChart(portfolioValue);
-
             // Generate Line Chart
             generateLineChart(portfolioHistory);
         }
@@ -264,13 +258,48 @@
             let labels = [];
             let data = [];
 
-            for (let coinId in portfolioValue.coins) {
-                labels.push(coinId);
-                let amount = portfolioValue.coins[coinId].amount;
-                let price = portfolioValue.coins[coinId].price;
-                let value = amount * price;
-                data.push(value);
+            if (groupStableCoins) {
+                let stableCoinTotal = 0;
+
+                for (let coinId in portfolioValue.coins) {
+                    if (isStableCoin(coinId)) {
+                        stableCoinTotal += portfolioValue.coins[coinId].amount * portfolioValue.coins[coinId].price;
+                    } else {
+                        labels.push(coinId);
+                        let amount = portfolioValue.coins[coinId].amount;
+                        let price = portfolioValue.coins[coinId].price;
+                        let value = amount * price;
+                        data.push(value);
+                    }
+                }
+
+                if (stableCoinTotal > 0) {
+                    labels.push('Stable Coins');
+                    data.push(stableCoinTotal);
+                }
+            } else {
+                for (let coinId in portfolioValue.coins) {
+                    labels.push(coinId);
+                    let amount = portfolioValue.coins[coinId].amount;
+                    let price = portfolioValue.coins[coinId].price;
+                    let value = amount * price;
+                    data.push(value);
+                }
             }
+
+            // Array of colors for the pie chart
+            let backgroundColors = [
+                '#ff3b30', // Red
+                '#ff9500', // Orange
+                '#ffcc00', // Yellow
+                '#4cd964', // Green
+                '#5ac8fa', // Blue
+                '#5856d6', // Indigo
+                '#ff6a80', // Pink
+                '#ffcc99', // Peach
+                '#a7ffeb', // Light Blue
+                '#dabaff'  // Lavender
+            ];
 
             new Chart(ctx, {
                 type: 'pie',
@@ -279,14 +308,7 @@
                     datasets: [{
                         label: 'Cryptocurrency Distribution',
                         data: data,
-                        backgroundColor: [
-                            '#ff3b30',
-                            '#ff9500',
-                            '#ffcc00',
-                            '#4cd964',
-                            '#5ac8fa',
-                            '#5856d6'
-                        ],
+                        backgroundColor: backgroundColors.slice(0, labels.length), // Ensure number of colors matches number of labels
                         borderWidth: 1
                     }]
                 },
@@ -307,54 +329,6 @@
             });
         }
 
-        function generateBarChart(portfolioValue) {
-            let ctx = document.getElementById('bar-chart').getContext('2d');
-            let stableCoinTotal = 0;
-            let totalValue = calculateTotalPortfolioValue(portfolioValue);
-
-            for (let coinId in portfolioValue.coins) {
-                if (isStableCoin(coinId)) {
-                    stableCoinTotal += portfolioValue.coins[coinId].amount * portfolioValue.coins[coinId].price;
-                }
-            }
-
-            let data = [stableCoinTotal, totalValue - stableCoinTotal];
-            let labels = ['Stable Coins', 'Other Coins'];
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Allocation',
-                        data: data,
-                        backgroundColor: [
-                            '#ff3b30',
-                            '#5ac8fa'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    },
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Allocation',
-                            font: {
-                                size: 18,
-                                family: "'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif"
-                            }
-                        }
-                    }
-                }
-            });
-        }
 
         function generateLineChart(portfolioHistory) {
             let ctx = document.getElementById('line-chart').getContext('2d');
@@ -365,8 +339,8 @@
                 let portfolioData = portfolioHistory.data[key].portfolio_data;
                 let totalValue = calculateTotalPortfolioValue(portfolioData);
                 let timestamp = portfolioHistory.data[key].last_updated;
-                labels.unshift(timestamp); // Reverse the order of labels
-                data.unshift(totalValue); // Reverse the order of data
+                labels.unshift(timestamp);
+                data.unshift(totalValue);
             }
 
             new Chart(ctx, {
