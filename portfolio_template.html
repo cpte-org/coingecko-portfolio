@@ -33,7 +33,6 @@
         #portfolio {
             text-align: center;
             width: 90%;
-            max-width: 800px;
             margin: auto;
             border-radius: 12px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
@@ -208,6 +207,11 @@
                 let price_change_1h = details.price_change_1h;
                 let price_change_24h  = details.price_change_24h;
                 let price_change_7d  = details.price_change_7d;
+                let price_change_14d  = details.price_change_14d;
+                let price_change_30d  = details.price_change_30d;
+                let price_change_60d  = details.price_change_60d;
+                let price_change_200d  = details.price_change_200d;
+                let price_change_1y  = details.price_change_1y;
                 
                 tableData.push({
                     Cryptocurrency: coinId,
@@ -216,6 +220,11 @@
                     'price_change_1h': price_change_1h.toFixed(2),
                     'price_change_24h': price_change_24h.toFixed(2),
                     'price_change_7d': price_change_7d.toFixed(2),
+                    'price_change_14d': price_change_14d.toFixed(2),
+                    'price_change_30d': price_change_30d.toFixed(2),
+                    'price_change_60d': price_change_60d.toFixed(2),
+                    'price_change_200d': price_change_200d.toFixed(2),
+                    'price_change_1y': price_change_1y.toFixed(2),
                     'Value (USD)': value.toFixed(2)
                 });
             }
@@ -227,12 +236,18 @@
                     { title: "Coin", field: "Cryptocurrency" },
                     { title: "Amount", field: "Amount" },
                     { title: "Price (USD)", field: "Price (USD)" },
-                    { title: "1H", field: "price_change_1h", formatter: priceChangeFormatter },
-                    { title: "24H", field: "price_change_24h", formatter: priceChangeFormatter },
-                    { title: "7D", field: "price_change_7d" , formatter: priceChangeFormatter },
+                    { title: "1H", field: "price_change_1h", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "24H", field: "price_change_24h", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "7D", field: "price_change_7d", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "14D", field: "price_change_14d", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "30D", field: "price_change_30d", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "60D", field: "price_change_60d", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "200D", field: "price_change_200d", formatter: priceChangeFormatter, sorter: "number" },
+                    { title: "1Y", field: "price_change_1y", formatter: priceChangeFormatter, sorter: "number" },
                     { title: "Value (USD)", field: "Value (USD)" }
                 ],
-                initialSort: [{ column: "Cryptocurrency", dir: "asc" }]
+                initialSort: [{ column: "price_change_24h", dir: "desc" }],
+                headerVertical: false // Add this line to remove the vertical header row
             });
 
             let totalPortfolioValue = totalValue.toFixed(2);

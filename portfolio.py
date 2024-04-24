@@ -6,7 +6,13 @@ import time
 import os
 from dotenv import load_dotenv
 import webbrowser
-from sql_queries import CREATE_PORTFOLIOS_TABLE, CREATE_TRANSACTIONS_TABLE, CREATE_COINS_TABLE, CREATE_CRYPTOLOOKUP_TABLE, CREATE_HISTORY_TABLE
+from sql_queries import (
+    CREATE_PORTFOLIOS_TABLE,
+    CREATE_TRANSACTIONS_TABLE,
+    CREATE_COINS_TABLE,
+    CREATE_CRYPTOLOOKUP_TABLE,
+    CREATE_HISTORY_TABLE,
+)
 
 load_dotenv()
 
@@ -22,11 +28,15 @@ class CoinGeckoPortfolioManager:
         self.create_tables()
 
     def create_tables(self):
-        self.cursor.execute(CREATE_PORTFOLIOS_TABLE)
-        self.cursor.execute(CREATE_TRANSACTIONS_TABLE)
-        self.cursor.execute(CREATE_COINS_TABLE)
-        self.cursor.execute(CREATE_CRYPTOLOOKUP_TABLE)
-        self.cursor.execute(CREATE_HISTORY_TABLE)
+        tables = [
+            CREATE_PORTFOLIOS_TABLE,
+            CREATE_TRANSACTIONS_TABLE,
+            CREATE_COINS_TABLE,
+            CREATE_CRYPTOLOOKUP_TABLE,
+            CREATE_HISTORY_TABLE,
+        ]
+        for table_query in tables:
+            self.cursor.execute(table_query)
         self.conn.commit()
 
     def load_transactions(self):
@@ -180,8 +190,13 @@ class CoinGeckoPortfolioManager:
                 price_change_1h = coin_data['market_data']['price_change_percentage_1h_in_currency'].get(self.currency, 0)
                 price_change_24h = coin_data['market_data']['price_change_percentage_24h_in_currency'].get(self.currency, 0)
                 price_change_7d = coin_data['market_data']['price_change_percentage_7d_in_currency'].get(self.currency, 0)
+                price_change_14d = coin_data['market_data']['price_change_percentage_14d_in_currency'].get(self.currency, 0)
+                price_change_30d = coin_data['market_data']['price_change_percentage_30d_in_currency'].get(self.currency, 0)
+                price_change_60d = coin_data['market_data']['price_change_percentage_60d_in_currency'].get(self.currency, 0)
+                price_change_200d = coin_data['market_data']['price_change_percentage_200d_in_currency'].get(self.currency, 0)
+                price_change_1y = coin_data['market_data']['price_change_percentage_1y_in_currency'].get(self.currency, 0)
 
-                portfolio_data['coins'][coin_id] = {'amount': amount, 'price': price, 'price_change_1h': price_change_1h, 'price_change_24h': price_change_24h, 'price_change_7d': price_change_7d}
+                portfolio_data['coins'][coin_id] = {'amount': amount, 'price': price, 'price_change_1h': price_change_1h, 'price_change_24h': price_change_24h, 'price_change_7d': price_change_7d, 'price_change_14d': price_change_14d, 'price_change_30d': price_change_30d, 'price_change_60d': price_change_60d, 'price_change_200d': price_change_200d, 'price_change_1y': price_change_1y}
 
         return portfolio_data
     
